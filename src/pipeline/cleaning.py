@@ -18,7 +18,7 @@ def clean_crime_data(df_raw):
         
     if "NOME_MUNICIPIO" in df.columns:
         df["NOME_MUNICIPIO"] = df["NOME_MUNICIPIO"].str.replace(r"[.-]", " ", regex=True)
-        df["NOME_MUNICIPIO"] = df["NOME_MUNICIPIO"].str.replace(r"^S\s", "SÃO ", regex=True) # S.PAULO vira SÃO PAULO
+        df["NOME_MUNICIPIO"] = df["NOME_MUNICIPIO"].str.replace(r"^S\s", "SÃO ", regex=True) 
     
     df["BAIRRO"] = df["BAIRRO"].fillna("NÃO INFORMADO")
     df["DESCR_CONDUTA"] = df["DESCR_CONDUTA"].fillna("NÃO ESPECIFICADA")
@@ -43,16 +43,16 @@ def clean_auxiliary_table(df_raw):
     
     return df
 
-def clean_auxiliary_table(df_raw):
-    df = df_raw.copy()
+def clean_auxiliary_table(df_aux):
+    df_clean = df_aux.copy()
     
-    df["Municipio"] = df["Municipio"].astype(str).str.strip().str.upper()
+    df_clean["Municipio"] = df_clean["Municipio"].astype(str).str.upper().str.strip()
     
-    df = df[df["Municipio"].str.endswith("(SP)")]
+    df_clean = df_clean[df_clean["Municipio"].str.contains(r"\(SP\)$", regex=True)]
     
-    df["Municipio"] = df["Municipio"].str.replace(r"\s*\(SP\)$", "", regex=True)
+    df_clean["Municipio"] = df_clean["Municipio"].str.replace(r"\s*\(SP\)$", "", regex=True)
     
-    return df
+    return df_clean
 
 def validate_cleaned_data(df_crime, df_aux):
     print("=" * 50)
