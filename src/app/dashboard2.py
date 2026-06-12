@@ -1,7 +1,46 @@
 from dash import html, dcc, Input, Output
 import plotly.express as px
+import plotly.graph_objects as go
 from src.app.components.filters import create_filters
 import pandas as pd
+
+# ---------------------------------------------------------------------------
+# Paleta de cores padronizada por tipo de crime (NATUREZA_APURADA)
+# Usada em todos os gráficos que colorem por natureza do crime.
+# ---------------------------------------------------------------------------
+CRIME_COLOR_MAP = {
+    # Furtos
+    "FURTO DE VEÍCULO":                     "#E63946",
+    "FURTO - OUTROS":                        "#FF6B6B",
+    "FURTO DE CARGA":                        "#FF8FA3",
+    # Roubos
+    "ROUBO - OUTROS":                        "#2D6A4F",
+    "ROUBO DE VEÍCULO":                      "#40916C",
+    "ROUBO DE CARGA":                        "#52B788",
+    "ROUBO A BANCO":                         "#74C69D",
+    # Lesão corporal
+    "LESÃO CORPORAL DOLOSA":                 "#E76F51",
+    "LESÃO CORPORAL CULPOSA - OUTRAS":       "#F4A261",
+    "LESÃO CORPORAL CULPOSA POR ACIDENTE DE TRÂNSITO": "#FCBF49",
+    # Homicídio
+    "HOMICÍDIO DOLOSO":                      "#6D023A",
+    "HOMICÍDIO CULPOSO POR ACIDENTE DE TRÂNSITO": "#9E0059",
+    "TENTATIVA DE HOMICÍDIO":               "#C9184A",
+    # Drogas
+    "TRÁFICO DE ENTORPECENTES":              "#7B2D8B",
+    "USO DE ENTORPECENTES":                  "#A663CC",
+    # Armas
+    "PORTE DE ARMA":                         "#343A8C",
+    "DISPARO DE ARMA DE FOGO":              "#4361EE",
+    # Trânsito
+    "DIREÇÃO PERIGOSA":                      "#F77F00",
+    "EMBRIAGUEZ AO VOLANTE":                 "#FCBF49",
+    # Crimes sexuais
+    "ESTUPRO":                               "#9C4221",
+    "ESTUPRO DE VULNERÁVEL":                "#C05621",
+    # Outros
+    "OUTROS":                                "#8D99AE",
+}
 
 def init_dashboard(app, datasets, df_enriched=None):
 
@@ -56,17 +95,20 @@ def init_dashboard(app, datasets, df_enriched=None):
         top_crimes.sort_values("TOTAL"),
         x="TOTAL",
         y="NATUREZA_APURADA",
+        color="NATUREZA_APURADA",
         orientation="h",
         title="10 Tipos de Crime Mais Frequentes",
         labels={
             "TOTAL": "Quantidade",
             "NATUREZA_APURADA": "Natureza"
-        }
+        },
+        color_discrete_map=CRIME_COLOR_MAP
     )
 
     fig_top_crimes.update_layout(
         title_x=0.5,
-        yaxis={"categoryorder": "total ascending"}
+        yaxis={"categoryorder": "total ascending"},
+        showlegend=False
     )
 
     participacao = top_crimes.copy()
@@ -81,7 +123,9 @@ def init_dashboard(app, datasets, df_enriched=None):
         participacao,
         names="NATUREZA_APURADA",
         values="PERCENTUAL",
-        title="Participação de Cada Tipo de Crime"
+        title="Participação de Cada Tipo de Crime",
+        color="NATUREZA_APURADA",
+        color_discrete_map=CRIME_COLOR_MAP
     )
 
     fig_participacao.update_layout(
@@ -99,7 +143,8 @@ def init_dashboard(app, datasets, df_enriched=None):
             "PORTE_MUNICIPIO": "Porte do Município",
             "TOTAL": "Proporção",
             "NATUREZA_APURADA": "Natureza"
-        }
+        },
+        color_discrete_map=CRIME_COLOR_MAP
     )
 
     fig_natureza_porte.update_layout(
@@ -175,24 +220,38 @@ def init_dashboard(app, datasets, df_enriched=None):
         title_x=0.5
     )
 
+    # Treemap: top 10 cidades com mais crimes, mostrando as categorias mais repetidas
     sunburst_top = (
         sunburst_data
         .sort_values("TOTAL", ascending=False)
     )
-    top_cidades = sunburst_top["NOME_MUNICIPIO"].unique()[:10]
+    top_cidades = (
+        sunburst_top
+        .groupby("NOME_MUNICIPIO")["TOTAL"]
+        .sum()
+        .nlargest(10)
+        .index
+    )
     sunburst_filtrado = sunburst_top[
         sunburst_top["NOME_MUNICIPIO"].isin(top_cidades)
     ]
 
-    fig_sunburst = px.sunburst(
+    fig_sunburst = px.treemap(
         sunburst_filtrado,
         path=["NOME_MUNICIPIO", "NATUREZA_APURADA"],
         values="TOTAL",
-        title="Tipos de Crime por Cidade (Top 10)"
+        color="NATUREZA_APURADA",
+        color_discrete_map=CRIME_COLOR_MAP,
+        title="Categorias de Crime por Cidade (Top 10)"
     )
 
     fig_sunburst.update_layout(
-        title_x=0.5
+        title_x=0.5,
+        margin=dict(l=10, r=10, t=50, b=10)
+    )
+    fig_sunburst.update_traces(
+        textinfo="label+value+percent parent",
+        hovertemplate="<b>%{label}</b><br>Ocorrências: %{value:,}<br>% da cidade: %{percentParent:.1%}<extra></extra>"
     )
 
     ordem_dias = [
@@ -396,13 +455,16 @@ def init_dashboard(app, datasets, df_enriched=None):
                 top_crimes_upd.sort_values("TOTAL"),
                 x="TOTAL",
                 y="NATUREZA_APURADA",
+                color="NATUREZA_APURADA",
                 orientation="h",
                 title="10 Tipos de Crime Mais Frequentes",
-                labels={"TOTAL": "Quantidade", "NATUREZA_APURADA": "Natureza"}
+                labels={"TOTAL": "Quantidade", "NATUREZA_APURADA": "Natureza"},
+                color_discrete_map=CRIME_COLOR_MAP
             )
             fig_top_crimes_upd.update_layout(
                 title_x=0.5,
-                yaxis={"categoryorder": "total ascending"}
+                yaxis={"categoryorder": "total ascending"},
+                showlegend=False
             )
 
             # 2. Distribuição Relativa de Crimes por Porte
@@ -431,7 +493,8 @@ def init_dashboard(app, datasets, df_enriched=None):
                     "PORTE_MUNICIPIO": "Porte do Município",
                     "TOTAL": "Proporção",
                     "NATUREZA_APURADA": "Natureza"
-                }
+                },
+                color_discrete_map=CRIME_COLOR_MAP
             )
             fig_natureza_porte_upd.update_layout(
                 title_x=0.5,
@@ -517,22 +580,37 @@ def init_dashboard(app, datasets, df_enriched=None):
             )
 
             if not cidade_selecionada:
-                top_cidades_upd = sun_agg["NOME_MUNICIPIO"].unique()[:10]
+                top_cidades_upd = (
+                    sun_agg
+                    .groupby("NOME_MUNICIPIO")["TOTAL"]
+                    .sum()
+                    .nlargest(10)
+                    .index
+                )
                 sun_filtrado = sun_agg[
                     sun_agg["NOME_MUNICIPIO"].isin(top_cidades_upd)
                 ]
-                title_sun = "Tipos de Crime por Cidade (Top 10)"
+                title_sun = "Categorias de Crime por Cidade (Top 10)"
             else:
                 sun_filtrado = sun_agg
-                title_sun = f"Tipos de Crime em {cidade_selecionada}"
+                title_sun = f"Categorias de Crime em {cidade_selecionada}"
 
-            fig_sunburst_upd = px.sunburst(
+            fig_sunburst_upd = px.treemap(
                 sun_filtrado,
                 path=["NOME_MUNICIPIO", "NATUREZA_APURADA"],
                 values="TOTAL",
+                color="NATUREZA_APURADA",
+                color_discrete_map=CRIME_COLOR_MAP,
                 title=title_sun
             )
-            fig_sunburst_upd.update_layout(title_x=0.5)
+            fig_sunburst_upd.update_layout(
+                title_x=0.5,
+                margin=dict(l=10, r=10, t=50, b=10)
+            )
+            fig_sunburst_upd.update_traces(
+                textinfo="label+value+percent parent",
+                hovertemplate="<b>%{label}</b><br>Ocorrências: %{value:,}<br>% da cidade: %{percentParent:.1%}<extra></extra>"
+            )
 
             # 5. Heatmap Grupo por Dia da Semana
             df_gsemana_filtered = df_enriched.copy()
@@ -695,8 +773,13 @@ def init_dashboard(app, datasets, df_enriched=None):
                 top_crimes_upd.sort_values("TOTAL"),
                 x="TOTAL",
                 y="NATUREZA_APURADA",
+                color="NATUREZA_APURADA",
                 orientation="h",
-                title="10 Tipos de Crime Mais Frequentes"
+                title="10 Tipos de Crime Mais Frequentes",
+                color_discrete_map=CRIME_COLOR_MAP
+            )
+            fig_top_crimes_upd.update_layout(
+                showlegend=False
             )
 
             fig_natureza_porte_upd = px.bar(
@@ -710,7 +793,8 @@ def init_dashboard(app, datasets, df_enriched=None):
                     "PORTE_MUNICIPIO": "Porte do Município",
                     "TOTAL": "Proporção",
                     "NATUREZA_APURADA": "Natureza"
-                }
+                },
+                color_discrete_map=CRIME_COLOR_MAP
             )
 
             fig_natureza_porte_upd.update_layout(
@@ -765,20 +849,32 @@ def init_dashboard(app, datasets, df_enriched=None):
             fig_heatmap_upd.update_yaxes(tickfont=dict(size=11))
 
             sun_top = df_sun.sort_values("TOTAL", ascending=False)
-            top_cidades_upd = sun_top["NOME_MUNICIPIO"].unique()[:10]
+            top_cidades_upd = (
+                sun_top
+                .groupby("NOME_MUNICIPIO")["TOTAL"]
+                .sum()
+                .nlargest(10)
+                .index
+            )
             sun_filtrado = sun_top[
                 sun_top["NOME_MUNICIPIO"].isin(top_cidades_upd)
             ]
 
-            fig_sunburst_upd = px.sunburst(
+            fig_sunburst_upd = px.treemap(
                 sun_filtrado,
                 path=["NOME_MUNICIPIO", "NATUREZA_APURADA"],
                 values="TOTAL",
-                title="Tipos de Crime por Cidade (Top 10)"
+                color="NATUREZA_APURADA",
+                color_discrete_map=CRIME_COLOR_MAP,
+                title="Categorias de Crime por Cidade (Top 10)"
             )
-
             fig_sunburst_upd.update_layout(
-                title_x=0.5
+                title_x=0.5,
+                margin=dict(l=10, r=10, t=50, b=10)
+            )
+            fig_sunburst_upd.update_traces(
+                textinfo="label+value+percent parent",
+                hovertemplate="<b>%{label}</b><br>Ocorrências: %{value:,}<br>% da cidade: %{percentParent:.1%}<extra></extra>"
             )
 
             grupo_semana_pivot_upd = (
