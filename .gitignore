@@ -1,0 +1,24 @@
+# Ambientes virtuais
+.venv/
+venv/
+env/
+
+# Cache do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Cache do Jupyter Notebook
+.ipynb_checkpoints/
+
+# Dados (Pastas com os arquivos pesados)
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Arquivos do sistema operacional
+.DS_Store
+Thumbs.db
