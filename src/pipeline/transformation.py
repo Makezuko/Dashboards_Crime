@@ -26,21 +26,22 @@ def classify_city_size(populacao):
 
 def merge_and_enrich_data(df_crime, df_aux):
     df_merged = pd.merge(
-        df_crime, 
-        df_aux, 
-        left_on="NOME_MUNICIPIO", 
-        right_on="Municipio", 
+        df_crime,
+        df_aux,
+        left_on="NOME_MUNICIPIO",
+        right_on="Municipio",
         how="inner"
     )
-    
-    df_merged = df_merged.rename(columns={"Pop. Residente estimada (Pessoas)": "POPULACAO"})
-    
-    df_merged["PORTE_MUNICIPIO"] = df_merged["POPULACAO"].apply(classify_city_size)
-    
-    np.random.seed(42)
-    df_merged["AREA_KM2"] = df_merged["POPULACAO"] / np.random.uniform(10, 500, len(df_merged))
-    df_merged["DENSIDADE_DEMOGRAFICA"] = df_merged["POPULACAO"] / df_merged["AREA_KM2"]
-    
+
+    df_merged = df_merged.rename(
+        columns={"Pop. Residente estimada (Pessoas)": "POPULACAO"}
+    )
+
+    df_merged["PORTE_MUNICIPIO"] = (
+        df_merged["POPULACAO"]
+        .apply(classify_city_size)
+    )
+
     return df_merged
 
 def generate_dash_aggregations(df_enriched):
@@ -50,8 +51,8 @@ def generate_dash_aggregations(df_enriched):
     
     agg_porte = df_enriched.groupby("PORTE_MUNICIPIO").size().reset_index(name="TOTAL_CRIMES")
     
-    agg_correlacao = df_enriched.groupby(["NOME_MUNICIPIO", "DENSIDADE_DEMOGRAFICA", "POPULACAO", "NATUREZA_APURADA"]).size().reset_index(name="TOTAL_CRIMES")
-    agg_correlacao["TAXA_CRIMES_100K"] = (agg_correlacao["TOTAL_CRIMES"] / agg_correlacao["POPULACAO"]) * 100000
+    agg_correlacao = (df_enriched.groupby(["NOME_MUNICIPIO", "POPULACAO"]).size().reset_index(name="TOTAL_CRIMES"))
+    agg_correlacao["TAXA_CRIMES_100K"] = (agg_correlacao["TOTAL_CRIMES"]/ agg_correlacao["POPULACAO"]) * 100000
     
     agg_semanal = df_enriched.groupby(["DIA_SEMANA", "NOME_MUNICIPIO", "POPULACAO"]).size().reset_index(name="TOTAL_CRIMES")
     agg_semanal["TAXA_CRIMES_100K"] = (agg_semanal["TOTAL_CRIMES"] / agg_semanal["POPULACAO"]) * 100000
@@ -69,7 +70,7 @@ def generate_dash_aggregations(df_enriched):
     return {
         "top_10_cidades": top_10_violentas,
         "distribuicao_porte": agg_porte,
-        "correlacao_densidade": agg_correlacao,
+        "correlacao_populacao": agg_correlacao,
         "perfil_semanal": agg_semanal,
         "natureza_porte": agg_natureza_porte,
         "natureza_semana": agg_natureza_semana
@@ -111,23 +112,39 @@ def analyze_and_print_insights(dict_datasets_dash):
     porte_mais_violento = df_porte.loc[df_porte["TOTAL_CRIMES"].idxmax()]
     print(f"\n💡 CONCLUSÃO: O fenômeno da interiorização se confirma? A maior concentração absoluta de crimes está em municípios de {porte_mais_violento['PORTE_MUNICIPIO']} com {porte_mais_violento['PERCENTUAL']:.2f}% dos casos.")
 
-    # correlação de densidade - quao relacionada está a densidade demográfica com a taxa de crimes
     print("\n" + "-" * 40)
-    print(" CORRELAÇÃO DE DENSIDADE DEMOGRÁFICA")
-    df_corr = dict_datasets_dash["correlacao_densidade"]
-    
-    correlacao_geral = df_corr["DENSIDADE_DEMOGRAFICA"].corr(df_corr["TAXA_CRIMES_100K"])
-    print(f"Coeficiente de correlação geral (Densidade vs Taxa): {correlacao_geral:.4f}")
-    
-    print("\nTop 3 naturezas criminais com maior taxa média por densidade:")
-    df_natureza = df_corr.groupby("NATUREZA_APURADA")["TAXA_CRIMES_100K"].mean().reset_index()
-    df_natureza = df_natureza.sort_values(by="TAXA_CRIMES_100K", ascending=False).head(3)
-    for row in df_natureza.itertuples():
-        print(f"- {row.NATUREZA_APURADA}: Taxa média de {row.TAXA_CRIMES_100K:.2f}")
-        
-    status_corr = "forte" if abs(correlacao_geral) > 0.7 else "moderada" if abs(correlacao_geral) > 0.4 else "fraca ou inexistente"
-    print(f"\n💡 CONCLUSÃO: A hipótese de que a densidade demográfica impulsiona o crime possui uma correlação {status_corr} ({correlacao_geral:.2f}).")
+    print(" RELAÇÃO ENTRE POPULAÇÃO E TAXA DE CRIMINALIDADE")
 
+    df_corr = dict_datasets_dash["correlacao_populacao"]
+
+    correlacao_geral = (
+        df_corr["POPULACAO"]
+        .corr(df_corr["TAXA_CRIMES_100K"])
+    )
+
+    print(
+        f"Coeficiente de correlação (População vs Taxa): "
+        f"{correlacao_geral:.4f}"
+    )
+
+    status_corr = (
+        "forte"
+        if abs(correlacao_geral) > 0.7
+        else "moderada"
+        if abs(correlacao_geral) > 0.4
+        else "fraca ou inexistente"
+    )
+
+    print(
+        f"\n💡 CONCLUSÃO: A relação entre tamanho da população "
+        f"e taxa de criminalidade é {status_corr} "
+        f"({correlacao_geral:.2f})."
+    )
+
+    print(
+        "Isso mostra que municípios maiores não são "
+        "necessariamente os mais violentos proporcionalmente."
+    )
     # dia da semana com mais crimes 
     print("\n" + "-" * 40)
     print(" PERFIL SEMANAL DA VIOLÊNCIA")
