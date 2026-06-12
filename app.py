@@ -20,7 +20,8 @@ from src.pipeline.transformation import (
 )
 
 from src.app.dashboard1 import init_dashboard
-
+from src.app import dashboard2
+from dash import dcc, html
 
 print("Carregando e processando os dados...")
 
@@ -51,5 +52,24 @@ app_dash = dash.Dash(
 
 init_dashboard(app_dash, dict_datasets_dash)
 
+layout1 = app_dash.layout
+layout2 = dashboard2.get_layout(dict_datasets_dash)
+
+app_dash.layout = html.Div([
+    dcc.Tabs(
+        id="main-tabs",
+        value="tab-1",
+        children=[
+            dcc.Tab(label="Visão Geral (Dash 1)", value="tab-1", children=[layout1]),
+            dcc.Tab(label="Exploração (Dash 2)", value="tab-2", children=[layout2])
+        ],
+        colors={
+            "border": "white",
+            "primary": "black",
+            "background": "#f9f9f9"
+        }
+    )
+])
+
 if __name__ == "__main__":
-    server.run(debug=True, port=8050)
+    server.run(debug=True, use_reloader=False, port=8050)

@@ -1,6 +1,35 @@
 import pandas as pd
 import numpy as np
 
+ORDEM_HORARIO = ["Madrugada (00h–05h)", "Manhã (06h–11h)", "Tarde (12h–17h)", "Noite (18h–23h)"]
+GRUPOS_VALIDOS = ["Furto", "Roubo", "Lesão Corporal", "Trânsito", "Drogas",
+                  "Crimes Sexuais", "Homicídio", "Armas"]
+
+def map_grupo_crime(natureza):
+    nat = str(natureza).upper()
+    if "FURTO" in nat: return "Furto"
+    elif "ROUBO" in nat or "LATROCÍNIO" in nat or "EXTORSÃO" in nat: return "Roubo"
+    elif "LESÃO CORPORAL" in nat: return "Lesão Corporal"
+    elif "TRÂNSITO" in nat or "EMBRIAGUEZ" in nat or "HOMICÍDIO CULPOSO POR VEÍCULO" in nat: return "Trânsito"
+    elif "ENTORPECENTES" in nat or "DROGAS" in nat: return "Drogas"
+    elif "ESTUPRO" in nat or "SEXUAL" in nat or "ASSEDIAR" in nat: return "Crimes Sexuais"
+    elif "HOMICÍDIO" in nat or "FEMINICÍDIO" in nat: return "Homicídio"
+    elif "ARMA" in nat or "MUNIÇÃO" in nat: return "Armas"
+    else: return "Outros"
+
+def map_faixa_horaria(hora_str):
+    if pd.isna(hora_str): return "Não Informado"
+    hora_str = str(hora_str).strip()
+    if hora_str == "Não Informado" or hora_str == "": return "Não Informado"
+    try:
+        h = int(hora_str.split(":")[0])
+        if 0 <= h <= 5: return "Madrugada (00h–05h)"
+        elif 6 <= h <= 11: return "Manhã (06h–11h)"
+        elif 12 <= h <= 17: return "Tarde (12h–17h)"
+        else: return "Noite (18h–23h)"
+    except:
+        return "Não Informado"
+
 def create_time_features(df):
     df_time = df.copy()
     
@@ -13,6 +42,12 @@ def create_time_features(df):
         }
         df_time["DIA_SEMANA"] = df_time["DATA_OCORRENCIA_BO"].dt.dayofweek.map(dias_pt)
         df_time["EH_FIM_SEMANA"] = df_time["DATA_OCORRENCIA_BO"].dt.dayofweek.isin([5, 6]).astype(int)
+
+    if "NATUREZA_APURADA" in df_time.columns:
+        df_time["GRUPO_CRIME"] = df_time["NATUREZA_APURADA"].apply(map_grupo_crime)
+        
+    if "HORA_OCORRENCIA_BO" in df_time.columns:
+        df_time["FAIXA_HORARIA"] = df_time["HORA_OCORRENCIA_BO"].apply(map_faixa_horaria)
         
     return df_time
 
@@ -44,6 +79,49 @@ def merge_and_enrich_data(df_crime, df_aux):
 
     return df_merged
 
+def get_sunburst_data(df):
+    grupos_validos = [g for g in GRUPOS_VALIDOS if g in df["GRUPO_CRIME"].unique()]
+    result = (
+        df[df["GRUPO_CRIME"].isin(grupos_validos)]
+        .groupby(["NOME_MUNICIPIO", "GRUPO_CRIME"], observed=True)
+        .size()
+        .reset_index(name="quantidade")
+    )
+    # Filter top 10 cities by total volume to keep the treemap readable
+    top_cidades = result.groupby("NOME_MUNICIPIO", observed=True)["quantidade"].sum().nlargest(10).index
+    result = result[result["NOME_MUNICIPIO"].isin(top_cidades)]
+    return result
+
+def get_heatmap_group_weekday(df):
+    ordem_dias = ["SEGUNDA", "TERÇA", "QUARTA", "QUINTA", "SEXTA", "SÁBADO", "DOMINGO"]
+    dias_validos = [d for d in ordem_dias if d in df["DIA_SEMANA"].unique()]
+    grupos_validos = [g for g in GRUPOS_VALIDOS if g in df["GRUPO_CRIME"].unique()]
+
+    result = (
+        df[df["DIA_SEMANA"].isin(dias_validos) & df["GRUPO_CRIME"].isin(grupos_validos)]
+        .groupby(["GRUPO_CRIME", "DIA_SEMANA"], observed=True)
+        .size()
+        .reset_index(name="quantidade")
+    )
+    result["DIA_SEMANA"] = pd.Categorical(result["DIA_SEMANA"], categories=ordem_dias, ordered=True)
+    result["GRUPO_CRIME"] = pd.Categorical(result["GRUPO_CRIME"], categories=grupos_validos, ordered=True)
+    return result.sort_values(["GRUPO_CRIME", "DIA_SEMANA"])
+
+def get_crimes_by_hour_group(df):
+    horarios_validos = [h for h in ORDEM_HORARIO if h in df["FAIXA_HORARIA"].unique()]
+    grupos_validos = [g for g in GRUPOS_VALIDOS if g in df["GRUPO_CRIME"].unique()]
+
+    result = (
+        df[df["FAIXA_HORARIA"].isin(horarios_validos) & df["GRUPO_CRIME"].isin(grupos_validos)]
+        .groupby(["FAIXA_HORARIA", "GRUPO_CRIME"], observed=True)
+        .size()
+        .reset_index(name="quantidade")
+    )
+    result["FAIXA_HORARIA"] = pd.Categorical(
+        result["FAIXA_HORARIA"], categories=ORDEM_HORARIO, ordered=True
+    )
+    return result.sort_values("FAIXA_HORARIA")
+
 def generate_dash_aggregations(df_enriched):
     agg_cidades = df_enriched.groupby(["NOME_MUNICIPIO", "POPULACAO"]).size().reset_index(name="TOTAL_CRIMES")
     agg_cidades["TAXA_CRIMES_100K"] = (agg_cidades["TOTAL_CRIMES"] / agg_cidades["POPULACAO"]) * 100000
@@ -73,7 +151,10 @@ def generate_dash_aggregations(df_enriched):
         "correlacao_populacao": agg_correlacao,
         "perfil_semanal": agg_semanal,
         "natureza_porte": agg_natureza_porte,
-        "natureza_semana": agg_natureza_semana
+        "natureza_semana": agg_natureza_semana,
+        "sunburst_grupo_natureza": get_sunburst_data(df_enriched),
+        "heatmap_grupo_dia": get_heatmap_group_weekday(df_enriched),
+        "barras_faixa_grupo": get_crimes_by_hour_group(df_enriched)
     }
 
 def execute_transformation_pipeline(df_crime_clean, df_aux_clean):

@@ -12,7 +12,7 @@ def clean_crime_data(df_raw):
     fim_janela = "2025-12-31"
     df = df[(df["DATA_OCORRENCIA_BO"] >= inicio_janela) & (df["DATA_OCORRENCIA_BO"] <= fim_janela)]
     
-    string_cols = df.select_dtypes(include=["object", "str"]).columns
+    string_cols = df.select_dtypes(include=["object", "string"]).columns
     for col in string_cols:
         df[col] = df[col].astype(str).str.strip().str.upper()
         
