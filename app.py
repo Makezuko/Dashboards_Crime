@@ -65,7 +65,8 @@ init_dashboard1(
 
 init_dashboard2(
     app_dashboard2,
-    dict_datasets_dash
+    dict_datasets_dash,
+    df_enriched
 )
 
 if __name__ == "__main__":

@@ -43,3 +43,34 @@ body{
 .grafico-metade{
     flex:1;
 }
+
+.filters-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 30px;
+    margin: 20px;
+    padding: 20px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.filter {
+    flex: 1;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.filter label {
+    font-weight: bold;
+    color: #1d3557;
+    font-size: 14px;
+}
+
+.grafico-full {
+    flex: 1;
+    width: 100%;
+}

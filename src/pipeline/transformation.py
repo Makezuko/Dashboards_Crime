@@ -43,6 +43,41 @@ def classify_city_size(populacao):
         return "GRANDE PORTE (>300K HAB)"
 
 
+def classify_crime_group(natureza):
+    natureza_upper = str(natureza).upper()
+    if "FURTO" in natureza_upper:
+        return "Furto"
+    if "ROUBO" in natureza_upper or "LATROCÍNIO" in natureza_upper or "LATROCINIO" in natureza_upper:
+        return "Roubo"
+    if "HOMICÍDIO" in natureza_upper or "HOMICIDIO" in natureza_upper:
+        return "Homicídio"
+    if "LESÃO" in natureza_upper or "LESAO" in natureza_upper:
+        return "Lesão Corporal"
+    if "ENTORPECENTE" in natureza_upper or "TRÁFICO" in natureza_upper or "TRAFICO" in natureza_upper:
+        return "Drogas"
+    if "ARMA" in natureza_upper:
+        return "Armas"
+    if "TRÂNSITO" in natureza_upper or "TRANSITO" in natureza_upper:
+        return "Trânsito"
+    return "Outros"
+
+
+def classify_time_period(hora):
+    try:
+        h = int(str(hora).split(":")[0])
+    except (ValueError, IndexError):
+        return "Indefinido"
+    if 0 <= h <= 5:
+        return "Madrugada (00h–05h)"
+    if 6 <= h <= 11:
+        return "Manhã (06h–11h)"
+    if 12 <= h <= 17:
+        return "Tarde (12h–17h)"
+    if 18 <= h <= 23:
+        return "Noite (18h–23h)"
+    return "Indefinido"
+
+
 def merge_and_enrich_data(df_crime, df_aux):
     df_merged = pd.merge(
         df_crime,
@@ -62,6 +97,17 @@ def merge_and_enrich_data(df_crime, df_aux):
         df_merged["POPULACAO"]
         .apply(classify_city_size)
     )
+
+    df_merged["GRUPO"] = (
+        df_merged["NATUREZA_APURADA"]
+        .apply(classify_crime_group)
+    )
+
+    if "HORA_OCORRENCIA_BO" in df_merged.columns:
+        df_merged["FAIXA_HORARIA"] = (
+            df_merged["HORA_OCORRENCIA_BO"]
+            .apply(classify_time_period)
+        )
 
     return df_merged
 
@@ -163,13 +209,48 @@ def generate_dash_aggregations(df_enriched):
         .reset_index(name="TOTAL")
     )
 
+    agg_sunburst = (
+        df_enriched
+        .groupby(
+            ["NOME_MUNICIPIO", "NATUREZA_APURADA"]
+        )
+        .size()
+        .reset_index(name="TOTAL")
+    )
+
+    agg_grupo_semana = (
+        df_enriched
+        .groupby(
+            ["DIA_SEMANA", "GRUPO"],
+            observed=True
+        )
+        .size()
+        .reset_index(name="TOTAL")
+    )
+
+    agg_grupo_faixa = pd.DataFrame()
+    if "FAIXA_HORARIA" in df_enriched.columns:
+        agg_grupo_faixa = (
+            df_enriched[
+                df_enriched["FAIXA_HORARIA"] != "Indefinido"
+            ]
+            .groupby(
+                ["FAIXA_HORARIA", "GRUPO"]
+            )
+            .size()
+            .reset_index(name="TOTAL")
+        )
+
     return {
         "top_10_cidades": top_10_violentas,
         "distribuicao_porte": agg_porte,
         "correlacao_populacao": agg_correlacao,
         "perfil_semanal": agg_semanal,
         "natureza_porte": agg_natureza_porte,
-        "natureza_semana": agg_natureza_semana
+        "natureza_semana": agg_natureza_semana,
+        "sunburst_cidade_natureza": agg_sunburst,
+        "grupo_semana": agg_grupo_semana,
+        "grupo_faixa_horaria": agg_grupo_faixa
     }
 
 

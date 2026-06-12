@@ -3,7 +3,7 @@ import plotly.express as px
 from src.app.components.filters import create_filters
 import pandas as pd
 
-def init_dashboard(app, datasets):
+def init_dashboard(app, datasets, df_enriched=None):
 
     top10 = datasets["top_10_cidades"]
     porte = datasets["distribuicao_porte"]
@@ -11,6 +11,9 @@ def init_dashboard(app, datasets):
     correlacao = datasets["correlacao_populacao"]
     natureza_porte = datasets["natureza_porte"]
     natureza_semana = datasets["natureza_semana"]
+    sunburst_data = datasets["sunburst_cidade_natureza"]
+    grupo_semana = datasets["grupo_semana"]
+    grupo_faixa = datasets["grupo_faixa_horaria"]
 
     fig_ranking_porte = px.bar(
         porte.sort_values("TOTAL_CRIMES"),
@@ -85,7 +88,6 @@ def init_dashboard(app, datasets):
         title_x=0.5
     )
 
-    # --- MODELO CORRIGIDO: SEM LEGENDA SOBREPOSTA E COM MARGENS CORRETAS (INICIAL) ---
     fig_natureza_porte = px.bar(
         natureza_porte,
         x="TOTAL",
@@ -103,17 +105,15 @@ def init_dashboard(app, datasets):
     fig_natureza_porte.update_layout(
         title_x=0.5,
         title_font=dict(size=16, family="Arial, sans-serif"),
-        barmode="stack",      
-        barnorm="percent",    
+        barmode="stack",
+        barnorm="percent",
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
-        showlegend=False,     # Remove a legenda poluída que invadiu o gráfico
-        margin=dict(l=180, r=30, t=50, b=50), # Dá espaço na esquerda para os textos longos dos Portes
-        xaxis=dict(ticksuffix="%") # Adiciona símbolo de porcentagem no eixo X
+        showlegend=False,
+        margin=dict(l=180, r=30, t=50, b=50),
+        xaxis=dict(ticksuffix="%")
     )
-    # Ajusta as caixas interativas do mouse para mostrar o valor formatado de forma limpa
     fig_natureza_porte.update_traces(hovertemplate="<b>%{hovertext}</b><br>Proporção: %{x:.2f}%<extra></extra>")
-    # ----------------------------------------------------------------------------------
 
     heatmap_data = (
         natureza_semana
@@ -135,15 +135,15 @@ def init_dashboard(app, datasets):
             "y": "Natureza do Crime",
             "color": "Ocorrências"
         },
-        color_continuous_scale="Reds"  
+        color_continuous_scale="Reds"
     )
-    
+
     fig_heatmap.update_layout(
         title_x=0.5,
         title_font=dict(size=16, family="Arial, sans-serif"),
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=150, r=20, t=50, b=50),  
+        margin=dict(l=150, r=20, t=50, b=50),
         coloraxis_colorbar=dict(
             title="Qtd",
             thicknessmode="pixels", thickness=15,
@@ -151,7 +151,7 @@ def init_dashboard(app, datasets):
             yanchor="middle", y=0.5
         )
     )
-    fig_heatmap.update_yaxes(tickfont=dict(size=11))  
+    fig_heatmap.update_yaxes(tickfont=dict(size=11))
 
     diversidade_crimes = (
         natureza_porte
@@ -175,6 +175,96 @@ def init_dashboard(app, datasets):
         title_x=0.5
     )
 
+    sunburst_top = (
+        sunburst_data
+        .sort_values("TOTAL", ascending=False)
+    )
+    top_cidades = sunburst_top["NOME_MUNICIPIO"].unique()[:10]
+    sunburst_filtrado = sunburst_top[
+        sunburst_top["NOME_MUNICIPIO"].isin(top_cidades)
+    ]
+
+    fig_sunburst = px.sunburst(
+        sunburst_filtrado,
+        path=["NOME_MUNICIPIO", "NATUREZA_APURADA"],
+        values="TOTAL",
+        title="Tipos de Crime por Cidade (Top 10)"
+    )
+
+    fig_sunburst.update_layout(
+        title_x=0.5
+    )
+
+    ordem_dias = [
+        "SEGUNDA",
+        "TERÇA",
+        "QUARTA",
+        "QUINTA",
+        "SEXTA",
+        "SÁBADO",
+        "DOMINGO"
+    ]
+
+    grupo_semana_pivot = (
+        grupo_semana
+        .pivot_table(
+            index="GRUPO",
+            columns="DIA_SEMANA",
+            values="TOTAL",
+            aggfunc="sum"
+        )
+        .fillna(0)
+    )
+
+    cols_ordenadas = [d for d in ordem_dias if d in grupo_semana_pivot.columns]
+    grupo_semana_pivot = grupo_semana_pivot[cols_ordenadas]
+
+    fig_grupo_heatmap = px.imshow(
+        grupo_semana_pivot,
+        aspect="auto",
+        title="Intensidade: Grupo de Crime por Dia da Semana",
+        labels={
+            "x": "Dia da Semana",
+            "y": "Grupo",
+            "color": "Ocorrências"
+        },
+        color_continuous_scale="Reds"
+    )
+
+    fig_grupo_heatmap.update_layout(
+        title_x=0.5,
+        title_font=dict(size=16, family="Arial, sans-serif"),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=150, r=20, t=50, b=50)
+    )
+
+    ordem_faixas = [
+        "Madrugada (00h–05h)",
+        "Manhã (06h–11h)",
+        "Tarde (12h–17h)",
+        "Noite (18h–23h)"
+    ]
+
+    fig_faixa_horaria = px.bar(
+        grupo_faixa,
+        x="FAIXA_HORARIA",
+        y="TOTAL",
+        color="GRUPO",
+        title="Distribuição por Faixa Horária e Grupo",
+        labels={
+            "FAIXA_HORARIA": "Faixa Horária",
+            "TOTAL": "Ocorrências",
+            "GRUPO": "Grupo"
+        },
+        category_orders={"FAIXA_HORARIA": ordem_faixas}
+    )
+
+    fig_faixa_horaria.update_layout(
+        title_x=0.5,
+        barmode="stack"
+    )
+
     app.layout = html.Div([
 
         html.H1(
@@ -183,8 +273,41 @@ def init_dashboard(app, datasets):
         ),
         create_filters(
             natureza_porte,
-            natureza_semana
+            natureza_semana,
+            df_enriched
         ),
+        html.Div([
+
+            html.Div(
+                dcc.Graph(
+                    id="grafico-sunburst",
+                    figure=fig_sunburst
+                ),
+                className="grafico-metade"
+            ),
+
+            html.Div(
+                dcc.Graph(
+                    id="grafico-grupo-heatmap",
+                    figure=fig_grupo_heatmap
+                ),
+                className="grafico-metade"
+            ),
+
+        ], className="linha-graficos"),
+
+        html.Div([
+
+            html.Div(
+                dcc.Graph(
+                    id="grafico-faixa-horaria",
+                    figure=fig_faixa_horaria
+                ),
+                className="grafico-full"
+            )
+
+        ], className="linha-graficos"),
+
         html.Div([
 
             html.Div(
@@ -240,149 +363,485 @@ def init_dashboard(app, datasets):
         Output("grafico-top-crimes", "figure"),
         Output("grafico-natureza-porte", "figure"),
         Output("grafico-heatmap", "figure"),
+        Output("grafico-sunburst", "figure"),
+        Output("grafico-grupo-heatmap", "figure"),
+        Output("grafico-faixa-horaria", "figure"),
         Input("filtro-porte", "value"),
-        Input("filtro-dia", "value")
+        Input("filtro-dia", "value"),
+        Input("filtro-cidade", "value")
     )
-    def atualizar_graficos(porte_selecionado, dia_selecionado):
+    def atualizar_graficos(porte_selecionado, dia_selecionado, cidade_selecionada):
+        if df_enriched is not None:
+            df_filtered = df_enriched.copy()
+            
+            if porte_selecionado:
+                df_filtered = df_filtered[df_filtered["PORTE_MUNICIPIO"] == porte_selecionado]
+                
+            if cidade_selecionada:
+                df_filtered = df_filtered[df_filtered["NOME_MUNICIPIO"] == cidade_selecionada]
+                
+            if dia_selecionado:
+                df_filtered = df_filtered[df_filtered["DIA_SEMANA"] == dia_selecionado]
 
-        df_porte = natureza_porte.copy()
-        df_semana = naturezas_semana.copy() if 'naturezas_semana' in locals() else natureza_semana.copy()
-
-        if porte_selecionado:
-            df_porte = df_porte[
-                df_porte["PORTE_MUNICIPIO"] == porte_selecionado
-            ]
-
-            naturezas_validas = (
-                df_porte["NATUREZA_APURADA"]
-                .unique()
+            # 1. 10 Tipos de Crime Mais Frequentes
+            top_crimes_upd = (
+                df_filtered
+                .groupby("NATUREZA_APURADA")
+                .size()
+                .reset_index(name="TOTAL")
+                .sort_values(by="TOTAL", ascending=False)
+                .head(10)
+            )
+            fig_top_crimes_upd = px.bar(
+                top_crimes_upd.sort_values("TOTAL"),
+                x="TOTAL",
+                y="NATUREZA_APURADA",
+                orientation="h",
+                title="10 Tipos de Crime Mais Frequentes",
+                labels={"TOTAL": "Quantidade", "NATUREZA_APURADA": "Natureza"}
+            )
+            fig_top_crimes_upd.update_layout(
+                title_x=0.5,
+                yaxis={"categoryorder": "total ascending"}
             )
 
-            df_semana = df_semana[
-                df_semana["NATUREZA_APURADA"]
-                .isin(naturezas_validas)
-            ]
+            # 2. Distribuição Relativa de Crimes por Porte
+            df_porte_filtered = df_enriched.copy()
+            if cidade_selecionada:
+                df_porte_filtered = df_porte_filtered[df_porte_filtered["NOME_MUNICIPIO"] == cidade_selecionada]
+            if dia_selecionado:
+                df_porte_filtered = df_porte_filtered[df_porte_filtered["DIA_SEMANA"] == dia_selecionado]
+            if porte_selecionado:
+                df_porte_filtered = df_porte_filtered[df_porte_filtered["PORTE_MUNICIPIO"] == porte_selecionado]
 
-        if porte_selecionado:
-            naturezas_validas = (
-                df_porte["NATUREZA_APURADA"]
-                .unique()
+            df_porte_upd = (
+                df_porte_filtered
+                .groupby(["PORTE_MUNICIPIO", "NATUREZA_APURADA"])
+                .size()
+                .reset_index(name="TOTAL")
+            )
+            fig_natureza_porte_upd = px.bar(
+                df_porte_upd,
+                x="TOTAL",
+                y="PORTE_MUNICIPIO",
+                color="NATUREZA_APURADA",
+                orientation="h",
+                title="Distribuição Relativa de Crimes por Porte do Município",
+                labels={
+                    "PORTE_MUNICIPIO": "Porte do Município",
+                    "TOTAL": "Proporção",
+                    "NATUREZA_APURADA": "Natureza"
+                }
+            )
+            fig_natureza_porte_upd.update_layout(
+                title_x=0.5,
+                title_font=dict(size=16, family="Arial, sans-serif"),
+                barmode="stack",
+                barnorm="percent",
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                showlegend=False,
+                margin=dict(l=180, r=30, t=50, b=50),
+                xaxis=dict(ticksuffix="%")
+            )
+            fig_natureza_porte_upd.update_traces(hovertemplate="<b>%{hovertext}</b><br>Proporção: %{x:.2f}%<extra></extra>")
+
+            # 3. Natureza dos Crimes por Dia da Semana (Heatmap)
+            df_heatmap_filtered = df_enriched.copy()
+            if porte_selecionado:
+                df_heatmap_filtered = df_heatmap_filtered[df_heatmap_filtered["PORTE_MUNICIPIO"] == porte_selecionado]
+            if cidade_selecionada:
+                df_heatmap_filtered = df_heatmap_filtered[df_heatmap_filtered["NOME_MUNICIPIO"] == cidade_selecionada]
+            if dia_selecionado:
+                df_heatmap_filtered = df_heatmap_filtered[df_heatmap_filtered["DIA_SEMANA"] == dia_selecionado]
+
+            heatmap_data_upd = (
+                df_heatmap_filtered
+                .groupby(["NATUREZA_APURADA", "DIA_SEMANA"])
+                .size()
+                .reset_index(name="TOTAL")
+                .pivot_table(
+                    index="NATUREZA_APURADA",
+                    columns="DIA_SEMANA",
+                    values="TOTAL",
+                    aggfunc="sum"
+                )
+                .fillna(0)
             )
 
-            df_semana = df_semana[
-                df_semana["NATUREZA_APURADA"]
-                .isin(naturezas_validas)
-            ]
+            cols_ord_heatmap = [d for d in ordem_dias if d in heatmap_data_upd.columns]
+            if cols_ord_heatmap:
+                heatmap_data_upd = heatmap_data_upd[cols_ord_heatmap]
 
-        if dia_selecionado:
-            df_semana = df_semana[
-                df_semana["DIA_SEMANA"] == dia_selecionado
-            ]
+            fig_heatmap_upd = px.imshow(
+                heatmap_data_upd,
+                aspect="auto",
+                title="Tipos de Crime por Dia da Semana",
+                labels={
+                    "x": "Dia da Semana",
+                    "y": "Natureza do Crime",
+                    "color": "Ocorrências"
+                },
+                color_continuous_scale="Reds"
+            )
+            fig_heatmap_upd.update_layout(
+                title_x=0.5,
+                title_font=dict(size=16, family="Arial, sans-serif"),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                margin=dict(l=150, r=20, t=50, b=50),
+                coloraxis_colorbar=dict(
+                    title="Qtd",
+                    thicknessmode="pixels", thickness=15,
+                    lenmode="pixels", len=150,
+                    yanchor="middle", y=0.5
+                )
+            )
+            fig_heatmap_upd.update_yaxes(tickfont=dict(size=11))
 
-        top_crimes = (
-            df_porte
-            .groupby("NATUREZA_APURADA")["TOTAL"]
-            .sum()
-            .reset_index()
-            .sort_values(by="TOTAL", ascending=False)
-            .head(10)
-        )
+            # 4. Sunburst
+            df_sun_filtered = df_enriched.copy()
+            if porte_selecionado:
+                df_sun_filtered = df_sun_filtered[df_sun_filtered["PORTE_MUNICIPIO"] == porte_selecionado]
+            if cidade_selecionada:
+                df_sun_filtered = df_sun_filtered[df_sun_filtered["NOME_MUNICIPIO"] == cidade_selecionada]
+            if dia_selecionado:
+                df_sun_filtered = df_sun_filtered[df_sun_filtered["DIA_SEMANA"] == dia_selecionado]
 
-        fig_top_crimes = px.bar(
-            top_crimes.sort_values("TOTAL"),
-            x="TOTAL",
-            y="NATUREZA_APURADA",
-            orientation="h",
-            title="10 Tipos de Crime Mais Frequentes"
-        )
+            sun_agg = (
+                df_sun_filtered
+                .groupby(["NOME_MUNICIPIO", "NATUREZA_APURADA"])
+                .size()
+                .reset_index(name="TOTAL")
+                .sort_values("TOTAL", ascending=False)
+            )
 
-        # --- MODELO CORRIGIDO REPLICADO DENTRO DO CALLBACK ---
-        fig_natureza_porte = px.bar(
-            df_porte,
-            x="TOTAL",
-            y="PORTE_MUNICIPIO",
-            color="NATUREZA_APURADA",
-            orientation="h",
-            title="Distribuição Relativa de Crimes por Porte do Município",
-            labels={
-                "PORTE_MUNICIPIO": "Porte do Município",
-                "TOTAL": "Proporção",
-                "NATUREZA_APURADA": "Natureza"
-            }
-        )
+            if not cidade_selecionada:
+                top_cidades_upd = sun_agg["NOME_MUNICIPIO"].unique()[:10]
+                sun_filtrado = sun_agg[
+                    sun_agg["NOME_MUNICIPIO"].isin(top_cidades_upd)
+                ]
+                title_sun = "Tipos de Crime por Cidade (Top 10)"
+            else:
+                sun_filtrado = sun_agg
+                title_sun = f"Tipos de Crime em {cidade_selecionada}"
 
-        fig_natureza_porte.update_layout(
-            title_x=0.5,
-            title_font=dict(size=16, family="Arial, sans-serif"),
-            barmode="stack",      
-            barnorm="percent",    
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            showlegend=False,     # Mantém limpo após filtragem externa
-            margin=dict(l=180, r=30, t=50, b=50),
-            xaxis=dict(ticksuffix="%")
-        )
-        fig_natureza_porte.update_traces(hovertemplate="<b>%{hovertext}</b><br>Proporção: %{x:.2f}%<extra></extra>")
-        # -------------------------------------------------------------------
-
-        ordem_dias = [
-            "SEGUNDA",
-            "TERÇA",
-            "QUARTA",
-            "QUINTA",
-            "SEXTA",
-            "SÁBADO",
-            "DOMINGO"
-        ]
-
-        df_semana["DIA_SEMANA"] = pd.Categorical(
-            df_semana["DIA_SEMANA"],
-            categories=ordem_dias,
-            ordered=True
-        )
-
-        heatmap_data = (
-            df_semana
-            .pivot_table(
-                index="NATUREZA_APURADA",
-                columns="DIA_SEMANA",
+            fig_sunburst_upd = px.sunburst(
+                sun_filtrado,
+                path=["NOME_MUNICIPIO", "NATUREZA_APURADA"],
                 values="TOTAL",
-                aggfunc="sum"
+                title=title_sun
             )
-            .fillna(0)
-        )
+            fig_sunburst_upd.update_layout(title_x=0.5)
 
-        fig_heatmap = px.imshow(
-            heatmap_data,
-            aspect="auto",
-            title="Natureza dos Crimes por Dia da Semana",
-            labels={
-                "x": "Dia da Semana",
-                "y": "Natureza do Crime",
-                "color": "Ocorrências"
-            },
-            color_continuous_scale="Reds"  
-        )
+            # 5. Heatmap Grupo por Dia da Semana
+            df_gsemana_filtered = df_enriched.copy()
+            if porte_selecionado:
+                df_gsemana_filtered = df_gsemana_filtered[df_gsemana_filtered["PORTE_MUNICIPIO"] == porte_selecionado]
+            if cidade_selecionada:
+                df_gsemana_filtered = df_gsemana_filtered[df_gsemana_filtered["NOME_MUNICIPIO"] == cidade_selecionada]
+            if dia_selecionado:
+                df_gsemana_filtered = df_gsemana_filtered[df_gsemana_filtered["DIA_SEMANA"] == dia_selecionado]
 
-        fig_heatmap.update_layout(
-            title_x=0.5,
-            title_font=dict(size=16, family="Arial, sans-serif"),
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            margin=dict(l=150, r=20, t=50, b=50),
-            coloraxis_colorbar=dict(
-                title="Qtd",
-                thicknessmode="pixels", thickness=15,
-                lenmode="pixels", len=150,
-                yanchor="middle", y=0.5
+            grupo_semana_pivot_upd = (
+                df_gsemana_filtered
+                .groupby(["GRUPO", "DIA_SEMANA"])
+                .size()
+                .reset_index(name="TOTAL")
+                .pivot_table(
+                    index="GRUPO",
+                    columns="DIA_SEMANA",
+                    values="TOTAL",
+                    aggfunc="sum"
+                )
+                .fillna(0)
             )
-        )
-        fig_heatmap.update_yaxes(tickfont=dict(size=11))
 
-        return (
-            fig_top_crimes,
-            fig_natureza_porte,
-            fig_heatmap
-        )
+            cols_ord_gsemana = [d for d in ordem_dias if d in grupo_semana_pivot_upd.columns]
+            if cols_ord_gsemana:
+                grupo_semana_pivot_upd = grupo_semana_pivot_upd[cols_ord_gsemana]
+
+            fig_grupo_heatmap_upd = px.imshow(
+                grupo_semana_pivot_upd,
+                aspect="auto",
+                title="Intensidade: Grupo de Crime por Dia da Semana",
+                labels={
+                    "x": "Dia da Semana",
+                    "y": "Grupo",
+                    "color": "Ocorrências"
+                },
+                color_continuous_scale="Reds"
+            )
+            fig_grupo_heatmap_upd.update_layout(
+                title_x=0.5,
+                title_font=dict(size=16, family="Arial, sans-serif"),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                margin=dict(l=150, r=20, t=50, b=50)
+            )
+
+            # 6. Faixa Horária
+            df_gfaixa_filtered = df_enriched.copy()
+            if porte_selecionado:
+                df_gfaixa_filtered = df_gfaixa_filtered[df_gfaixa_filtered["PORTE_MUNICIPIO"] == porte_selecionado]
+            if cidade_selecionada:
+                df_gfaixa_filtered = df_gfaixa_filtered[df_gfaixa_filtered["NOME_MUNICIPIO"] == cidade_selecionada]
+            if dia_selecionado:
+                df_gfaixa_filtered = df_gfaixa_filtered[df_gfaixa_filtered["DIA_SEMANA"] == dia_selecionado]
+
+            if "FAIXA_HORARIA" in df_gfaixa_filtered.columns:
+                df_gfaixa_filtered = df_gfaixa_filtered[df_gfaixa_filtered["FAIXA_HORARIA"] != "Indefinido"]
+
+            df_gfaixa_agg = (
+                df_gfaixa_filtered
+                .groupby(["FAIXA_HORARIA", "GRUPO"])
+                .size()
+                .reset_index(name="TOTAL")
+            )
+
+            fig_faixa_upd = px.bar(
+                df_gfaixa_agg,
+                x="FAIXA_HORARIA",
+                y="TOTAL",
+                color="GRUPO",
+                title="Distribuição por Faixa Horária e Grupo",
+                labels={
+                    "FAIXA_HORARIA": "Faixa Horária",
+                    "TOTAL": "Ocorrências",
+                    "GRUPO": "Grupo"
+                },
+                category_orders={"FAIXA_HORARIA": ordem_faixas}
+            )
+            fig_faixa_upd.update_layout(
+                title_x=0.5,
+                barmode="stack"
+            )
+
+            return (
+                fig_top_crimes_upd,
+                fig_natureza_porte_upd,
+                fig_heatmap_upd,
+                fig_sunburst_upd,
+                fig_grupo_heatmap_upd,
+                fig_faixa_upd
+            )
+        else:
+            df_porte = natureza_porte.copy()
+            df_semana = natureza_semana.copy()
+            df_sun = sunburst_data.copy()
+            df_gsemana = grupo_semana.copy()
+            df_gfaixa = grupo_faixa.copy()
+
+            if cidade_selecionada and df_enriched is not None:
+                municipios_filtrados = df_enriched[
+                    df_enriched["NOME_MUNICIPIO"] == cidade_selecionada
+                ]
+                naturezas_cidade = municipios_filtrados["NATUREZA_APURADA"].unique()
+                portes_cidade = municipios_filtrados["PORTE_MUNICIPIO"].unique()
+                grupos_cidade = municipios_filtrados["GRUPO"].unique()
+
+                df_porte = df_porte[
+                    df_porte["NATUREZA_APURADA"].isin(naturezas_cidade)
+                    & df_porte["PORTE_MUNICIPIO"].isin(portes_cidade)
+                ]
+                df_semana = df_semana[
+                    df_semana["NATUREZA_APURADA"].isin(naturezas_cidade)
+                ]
+                df_sun = df_sun[
+                    df_sun["NOME_MUNICIPIO"] == cidade_selecionada
+                ]
+                df_gsemana = df_gsemana[
+                    df_gsemana["GRUPO"].isin(grupos_cidade)
+                ]
+                df_gfaixa = df_gfaixa[
+                    df_gfaixa["GRUPO"].isin(grupos_cidade)
+                ]
+
+            if porte_selecionado:
+                df_porte = df_porte[
+                    df_porte["PORTE_MUNICIPIO"] == porte_selecionado
+                ]
+
+                naturezas_validas = (
+                    df_porte["NATUREZA_APURADA"]
+                    .unique()
+                )
+
+                df_semana = df_semana[
+                    df_semana["NATUREZA_APURADA"]
+                    .isin(naturezas_validas)
+                ]
+
+            if dia_selecionado:
+                df_semana_filtrada = df_semana[
+                    df_semana["DIA_SEMANA"] == dia_selecionado
+                ]
+                df_gsemana = df_gsemana[
+                    df_gsemana["DIA_SEMANA"] == dia_selecionado
+                ]
+            else:
+                df_semana_filtrada = df_semana
+
+            top_crimes_upd = (
+                df_porte
+                .groupby("NATUREZA_APURADA")["TOTAL"]
+                .sum()
+                .reset_index()
+                .sort_values(by="TOTAL", ascending=False)
+                .head(10)
+            )
+
+            fig_top_crimes_upd = px.bar(
+                top_crimes_upd.sort_values("TOTAL"),
+                x="TOTAL",
+                y="NATUREZA_APURADA",
+                orientation="h",
+                title="10 Tipos de Crime Mais Frequentes"
+            )
+
+            fig_natureza_porte_upd = px.bar(
+                df_porte,
+                x="TOTAL",
+                y="PORTE_MUNICIPIO",
+                color="NATUREZA_APURADA",
+                orientation="h",
+                title="Distribuição Relativa de Crimes por Porte do Município",
+                labels={
+                    "PORTE_MUNICIPIO": "Porte do Município",
+                    "TOTAL": "Proporção",
+                    "NATUREZA_APURADA": "Natureza"
+                }
+            )
+
+            fig_natureza_porte_upd.update_layout(
+                title_x=0.5,
+                title_font=dict(size=16, family="Arial, sans-serif"),
+                barmode="stack",
+                barnorm="percent",
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                showlegend=False,
+                margin=dict(l=180, r=30, t=50, b=50),
+                xaxis=dict(ticksuffix="%")
+            )
+            fig_natureza_porte_upd.update_traces(hovertemplate="<b>%{hovertext}</b><br>Proporção: %{x:.2f}%<extra></extra>")
+
+            heatmap_data_upd = (
+                df_semana_filtrada
+                .pivot_table(
+                    index="NATUREZA_APURADA",
+                    columns="DIA_SEMANA",
+                    values="TOTAL",
+                    aggfunc="sum"
+                )
+                .fillna(0)
+            )
+
+            fig_heatmap_upd = px.imshow(
+                heatmap_data_upd,
+                aspect="auto",
+                title="Tipos de Crime por Dia da Semana",
+                labels={
+                    "x": "Dia da Semana",
+                    "y": "Natureza do Crime",
+                    "color": "Ocorrências"
+                },
+                color_continuous_scale="Reds"
+            )
+
+            fig_heatmap_upd.update_layout(
+                title_x=0.5,
+                title_font=dict(size=16, family="Arial, sans-serif"),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                margin=dict(l=150, r=20, t=50, b=50),
+                coloraxis_colorbar=dict(
+                    title="Qtd",
+                    thicknessmode="pixels", thickness=15,
+                    lenmode="pixels", len=150,
+                    yanchor="middle", y=0.5
+                )
+            )
+            fig_heatmap_upd.update_yaxes(tickfont=dict(size=11))
+
+            sun_top = df_sun.sort_values("TOTAL", ascending=False)
+            top_cidades_upd = sun_top["NOME_MUNICIPIO"].unique()[:10]
+            sun_filtrado = sun_top[
+                sun_top["NOME_MUNICIPIO"].isin(top_cidades_upd)
+            ]
+
+            fig_sunburst_upd = px.sunburst(
+                sun_filtrado,
+                path=["NOME_MUNICIPIO", "NATUREZA_APURADA"],
+                values="TOTAL",
+                title="Tipos de Crime por Cidade (Top 10)"
+            )
+
+            fig_sunburst_upd.update_layout(
+                title_x=0.5
+            )
+
+            grupo_semana_pivot_upd = (
+                df_gsemana
+                .pivot_table(
+                    index="GRUPO",
+                    columns="DIA_SEMANA",
+                    values="TOTAL",
+                    aggfunc="sum"
+                )
+                .fillna(0)
+            )
+
+            cols_ord = [d for d in ordem_dias if d in grupo_semana_pivot_upd.columns]
+            if cols_ord:
+                grupo_semana_pivot_upd = grupo_semana_pivot_upd[cols_ord]
+
+            fig_grupo_heatmap_upd = px.imshow(
+                grupo_semana_pivot_upd,
+                aspect="auto",
+                title="Intensidade: Grupo de Crime por Dia da Semana",
+                labels={
+                    "x": "Dia da Semana",
+                    "y": "Grupo",
+                    "color": "Ocorrências"
+                },
+                color_continuous_scale="Reds"
+            )
+
+            fig_grupo_heatmap_upd.update_layout(
+                title_x=0.5,
+                title_font=dict(size=16, family="Arial, sans-serif"),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                margin=dict(l=150, r=20, t=50, b=50)
+            )
+
+            fig_faixa_upd = px.bar(
+                df_gfaixa,
+                x="FAIXA_HORARIA",
+                y="TOTAL",
+                color="GRUPO",
+                title="Distribuição por Faixa Horária e Grupo",
+                labels={
+                    "FAIXA_HORARIA": "Faixa Horária",
+                    "TOTAL": "Ocorrências",
+                    "GRUPO": "Grupo"
+                },
+                category_orders={"FAIXA_HORARIA": ordem_faixas}
+            )
+
+            fig_faixa_upd.update_layout(
+                title_x=0.5,
+                barmode="stack"
+            )
+
+            return (
+                fig_top_crimes_upd,
+                fig_natureza_porte_upd,
+                fig_heatmap_upd,
+                fig_sunburst_upd,
+                fig_grupo_heatmap_upd,
+                fig_faixa_upd
+            )
 
     return app
