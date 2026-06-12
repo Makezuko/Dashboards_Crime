@@ -19,7 +19,8 @@ from src.pipeline.transformation import (
     analyze_and_print_insights
 )
 
-from src.app.dashboard1 import init_dashboard
+from src.app.dashboard1 import init_dashboard as init_dashboard1
+from src.app.dashboard2 import init_dashboard as init_dashboard2
 
 
 print("Carregando e processando os dados...")
@@ -43,13 +44,32 @@ assets_path = os.path.join(BASE_DIR, "assets")
 
 server = Flask(__name__)
 
-app_dash = dash.Dash(
+app_dashboard1 = dash.Dash(
     __name__,
     server=server,
+    url_base_pathname="/dashboard1/",
     assets_folder=assets_path
 )
 
-init_dashboard(app_dash, dict_datasets_dash)
+app_dashboard2 = dash.Dash(
+    __name__,
+    server=server,
+    url_base_pathname="/dashboard2/",
+    assets_folder=assets_path
+)
+
+init_dashboard1(
+    app_dashboard1,
+    dict_datasets_dash
+)
+
+init_dashboard2(
+    app_dashboard2,
+    dict_datasets_dash
+)
 
 if __name__ == "__main__":
-    server.run(debug=True, port=8050)
+    server.run(
+        debug=True,
+        port=8050
+    )

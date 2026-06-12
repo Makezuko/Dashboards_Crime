@@ -21,7 +21,8 @@ def init_dashboard(app, datasets):
     qtd_cidades = perfil["NOME_MUNICIPIO"].nunique()
 
     perfil_total = (
-        perfil.groupby(
+        perfil
+        .groupby(
             "DIA_SEMANA",
             observed=True
         )["TOTAL_CRIMES"]
@@ -82,6 +83,23 @@ def init_dashboard(app, datasets):
     )
 
     fig_top10.update_layout(
+        title_x=0.5,
+        yaxis={"categoryorder": "total ascending"}
+    )
+
+    fig_populacao = px.bar(
+        top10.sort_values("POPULACAO"),
+        x="POPULACAO",
+        y="NOME_MUNICIPIO",
+        orientation="h",
+        title="População das 10 Cidades Mais Violentas",
+        labels={
+            "POPULACAO": "População",
+            "NOME_MUNICIPIO": "Município"
+        }
+    )
+
+    fig_populacao.update_layout(
         title_x=0.5,
         yaxis={"categoryorder": "total ascending"}
     )
@@ -151,8 +169,20 @@ def init_dashboard(app, datasets):
                 className="grafico-metade"
             )
 
+        ], className="linha-graficos"),
+
+        html.Div([
+
+            html.Div(
+                dcc.Graph(
+                    figure=fig_populacao
+                ),
+                className="grafico-metade"
+            )
+
         ], className="linha-graficos")
 
     ])
 
     return app
+
