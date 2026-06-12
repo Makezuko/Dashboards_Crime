@@ -12,7 +12,6 @@ def init_dashboard(app, datasets):
     natureza_porte = datasets["natureza_porte"]
     natureza_semana = datasets["natureza_semana"]
 
-
     fig_ranking_porte = px.bar(
         porte.sort_values("TOTAL_CRIMES"),
         x="TOTAL_CRIMES",
@@ -86,22 +85,35 @@ def init_dashboard(app, datasets):
         title_x=0.5
     )
 
+    # --- MODELO CORRIGIDO: SEM LEGENDA SOBREPOSTA E COM MARGENS CORRETAS (INICIAL) ---
     fig_natureza_porte = px.bar(
         natureza_porte,
-        x="PORTE_MUNICIPIO",
-        y="TOTAL",
+        x="TOTAL",
+        y="PORTE_MUNICIPIO",
         color="NATUREZA_APURADA",
-        title="Tipos de Crime por Porte do Município",
+        orientation="h",
+        title="Distribuição Relativa de Crimes por Porte do Município",
         labels={
-            "PORTE_MUNICIPIO": "Porte",
-            "TOTAL": "Quantidade",
+            "PORTE_MUNICIPIO": "Porte do Município",
+            "TOTAL": "Proporção",
             "NATUREZA_APURADA": "Natureza"
         }
     )
 
     fig_natureza_porte.update_layout(
-        title_x=0.5
+        title_x=0.5,
+        title_font=dict(size=16, family="Arial, sans-serif"),
+        barmode="stack",      
+        barnorm="percent",    
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,     # Remove a legenda poluída que invadiu o gráfico
+        margin=dict(l=180, r=30, t=50, b=50), # Dá espaço na esquerda para os textos longos dos Portes
+        xaxis=dict(ticksuffix="%") # Adiciona símbolo de porcentagem no eixo X
     )
+    # Ajusta as caixas interativas do mouse para mostrar o valor formatado de forma limpa
+    fig_natureza_porte.update_traces(hovertemplate="<b>%{hovertext}</b><br>Proporção: %{x:.2f}%<extra></extra>")
+    # ----------------------------------------------------------------------------------
 
     heatmap_data = (
         natureza_semana
@@ -120,14 +132,26 @@ def init_dashboard(app, datasets):
         title="Tipos de Crime por Dia da Semana",
         labels={
             "x": "Dia da Semana",
-            "y": "Natureza",
-            "color": "Quantidade"
-        }
+            "y": "Natureza do Crime",
+            "color": "Ocorrências"
+        },
+        color_continuous_scale="Reds"  
     )
     
     fig_heatmap.update_layout(
-        title_x=0.5
+        title_x=0.5,
+        title_font=dict(size=16, family="Arial, sans-serif"),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=150, r=20, t=50, b=50),  
+        coloraxis_colorbar=dict(
+            title="Qtd",
+            thicknessmode="pixels", thickness=15,
+            lenmode="pixels", len=150,
+            yanchor="middle", y=0.5
+        )
     )
+    fig_heatmap.update_yaxes(tickfont=dict(size=11))  
 
     diversidade_crimes = (
         natureza_porte
@@ -219,11 +243,10 @@ def init_dashboard(app, datasets):
         Input("filtro-porte", "value"),
         Input("filtro-dia", "value")
     )
-    
     def atualizar_graficos(porte_selecionado, dia_selecionado):
 
         df_porte = natureza_porte.copy()
-        df_semana = natureza_semana.copy()
+        df_semana = naturezas_semana.copy() if 'naturezas_semana' in locals() else natureza_semana.copy()
 
         if porte_selecionado:
             df_porte = df_porte[
@@ -273,13 +296,34 @@ def init_dashboard(app, datasets):
             title="10 Tipos de Crime Mais Frequentes"
         )
 
+        # --- MODELO CORRIGIDO REPLICADO DENTRO DO CALLBACK ---
         fig_natureza_porte = px.bar(
             df_porte,
-            x="PORTE_MUNICIPIO",
-            y="TOTAL",
+            x="TOTAL",
+            y="PORTE_MUNICIPIO",
             color="NATUREZA_APURADA",
-            title="Tipos de Crime por Tamanho do Município"
+            orientation="h",
+            title="Distribuição Relativa de Crimes por Porte do Município",
+            labels={
+                "PORTE_MUNICIPIO": "Porte do Município",
+                "TOTAL": "Proporção",
+                "NATUREZA_APURADA": "Natureza"
+            }
         )
+
+        fig_natureza_porte.update_layout(
+            title_x=0.5,
+            title_font=dict(size=16, family="Arial, sans-serif"),
+            barmode="stack",      
+            barnorm="percent",    
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            showlegend=False,     # Mantém limpo após filtragem externa
+            margin=dict(l=180, r=30, t=50, b=50),
+            xaxis=dict(ticksuffix="%")
+        )
+        fig_natureza_porte.update_traces(hovertemplate="<b>%{hovertext}</b><br>Proporção: %{x:.2f}%<extra></extra>")
+        # -------------------------------------------------------------------
 
         ordem_dias = [
             "SEGUNDA",
@@ -311,8 +355,29 @@ def init_dashboard(app, datasets):
         fig_heatmap = px.imshow(
             heatmap_data,
             aspect="auto",
-            title="Natureza dos Crimes por Dia da Semana"
+            title="Natureza dos Crimes por Dia da Semana",
+            labels={
+                "x": "Dia da Semana",
+                "y": "Natureza do Crime",
+                "color": "Ocorrências"
+            },
+            color_continuous_scale="Reds"  
         )
+
+        fig_heatmap.update_layout(
+            title_x=0.5,
+            title_font=dict(size=16, family="Arial, sans-serif"),
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            margin=dict(l=150, r=20, t=50, b=50),
+            coloraxis_colorbar=dict(
+                title="Qtd",
+                thicknessmode="pixels", thickness=15,
+                lenmode="pixels", len=150,
+                yanchor="middle", y=0.5
+            )
+        )
+        fig_heatmap.update_yaxes(tickfont=dict(size=11))
 
         return (
             fig_top_crimes,
