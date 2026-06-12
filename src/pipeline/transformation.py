@@ -60,11 +60,19 @@ def generate_dash_aggregations(df_enriched):
     agg_semanal["DIA_SEMANA"] = pd.Categorical(agg_semanal["DIA_SEMANA"], categories=ordem_dias, ordered=True)
     agg_semanal = agg_semanal.sort_values("DIA_SEMANA")
     
+    # 1. Cruzamento de Natureza por Porte de Município
+    agg_natureza_porte = df_enriched.groupby(["PORTE_MUNICIPIO", "NATUREZA_APURADA"]).size().reset_index(name="TOTAL")
+
+    # 2. Cruzamento de Natureza por Dia da Semana (Efeito Fim de Semana)
+    agg_natureza_semana = df_enriched.groupby(["DIA_SEMANA", "NATUREZA_APURADA"], observed=True).size().reset_index(name="TOTAL")
+
     return {
         "top_10_cidades": top_10_violentas,
         "distribuicao_porte": agg_porte,
         "correlacao_densidade": agg_correlacao,
-        "perfil_semanal": agg_semanal
+        "perfil_semanal": agg_semanal,
+        "natureza_porte": agg_natureza_porte,
+        "natureza_semana": agg_natureza_semana
     }
 
 def execute_transformation_pipeline(df_crime_clean, df_aux_clean):
@@ -74,3 +82,101 @@ def execute_transformation_pipeline(df_crime_clean, df_aux_clean):
     dict_datasets_dash = generate_dash_aggregations(df_enriched)
     
     return df_enriched, dict_datasets_dash
+
+def analyze_and_print_insights(dict_datasets_dash):
+    print("=" * 40)
+    print(" ANALISE CRÍTICA E INSIGHTS DOS DADOS ")
+    print("=" * 40)
+    
+    # top 10 Cidades
+    print("\n TOP 10 CIDADES MAIS VIOLENTAS")
+    df_top10 = dict_datasets_dash["top_10_cidades"]
+    for i, row in enumerate(df_top10.itertuples(), 1):
+        print(f"{i}º {row.NOME_MUNICIPIO} | Taxa: {row.TAXA_CRIMES_100K:.2f} por 100k hab. (Pop: {int(row.POPULACAO)})")
+    
+    cidade_topo = df_top10.iloc[0]["NOME_MUNICIPIO"]
+    taxa_topo = df_top10.iloc[0]["TAXA_CRIMES_100K"]
+    print(f"\n💡 CONCLUSÃO: A cidade proporcionalmente mais violenta é {cidade_topo}, com uma taxa de {taxa_topo:.2f} crimes por 100 mil habitantes, superando a média das demais.")
+
+    # distribuição por porte dos municípios
+    print("\n" + "-" * 40)
+    print(" DISTRIBUIÇÃO POR PORTE DOS MUNICÍPIOS")
+    df_porte = dict_datasets_dash["distribuicao_porte"].copy()
+    total_crimes = df_porte["TOTAL_CRIMES"].sum()
+    df_porte["PERCENTUAL"] = (df_porte["TOTAL_CRIMES"] / total_crimes) * 100
+    
+    for row in df_porte.itertuples():
+        print(f"- {row.PORTE_MUNICIPIO}: {row.TOTAL_CRIMES} crimes ({row.PERCENTUAL:.2f}%)")
+        
+    porte_mais_violento = df_porte.loc[df_porte["TOTAL_CRIMES"].idxmax()]
+    print(f"\n💡 CONCLUSÃO: O fenômeno da interiorização se confirma? A maior concentração absoluta de crimes está em municípios de {porte_mais_violento['PORTE_MUNICIPIO']} com {porte_mais_violento['PERCENTUAL']:.2f}% dos casos.")
+
+    # correlação de densidade - quao relacionada está a densidade demográfica com a taxa de crimes
+    print("\n" + "-" * 40)
+    print(" CORRELAÇÃO DE DENSIDADE DEMOGRÁFICA")
+    df_corr = dict_datasets_dash["correlacao_densidade"]
+    
+    correlacao_geral = df_corr["DENSIDADE_DEMOGRAFICA"].corr(df_corr["TAXA_CRIMES_100K"])
+    print(f"Coeficiente de correlação geral (Densidade vs Taxa): {correlacao_geral:.4f}")
+    
+    print("\nTop 3 naturezas criminais com maior taxa média por densidade:")
+    df_natureza = df_corr.groupby("NATUREZA_APURADA")["TAXA_CRIMES_100K"].mean().reset_index()
+    df_natureza = df_natureza.sort_values(by="TAXA_CRIMES_100K", ascending=False).head(3)
+    for row in df_natureza.itertuples():
+        print(f"- {row.NATUREZA_APURADA}: Taxa média de {row.TAXA_CRIMES_100K:.2f}")
+        
+    status_corr = "forte" if abs(correlacao_geral) > 0.7 else "moderada" if abs(correlacao_geral) > 0.4 else "fraca ou inexistente"
+    print(f"\n💡 CONCLUSÃO: A hipótese de que a densidade demográfica impulsiona o crime possui uma correlação {status_corr} ({correlacao_geral:.2f}).")
+
+    # dia da semana com mais crimes 
+    print("\n" + "-" * 40)
+    print(" PERFIL SEMANAL DA VIOLÊNCIA")
+    df_semana = dict_datasets_dash["perfil_semanal"]
+    
+    df_dias_agg = df_semana.groupby("DIA_SEMANA", observed=True)["TOTAL_CRIMES"].sum().reset_index()
+    total_semana = df_dias_agg["TOTAL_CRIMES"].sum()
+    df_dias_agg["PERCENTUAL"] = (df_dias_agg["TOTAL_CRIMES"] / total_semana) * 100
+    
+    for row in df_dias_agg.itertuples():
+        print(f"- {row.DIA_SEMANA}: {row.TOTAL_CRIMES} crimes ({row.PERCENTUAL:.2f}%)")
+        
+    dia_pico = df_dias_agg.loc[df_dias_agg["TOTAL_CRIMES"].idxmax()]
+    print(f"\n💡 CONCLUSÃO: O pico da atividade criminal ocorre na {dia_pico['DIA_SEMANA']}, concentrando {dia_pico['PERCENTUAL']:.2f}% das ocorrências do semestre. Alocação preventiva recomendada para este dia.")
+    print("=" * 40)
+
+    agg_natureza_porte = dict_datasets_dash["natureza_porte"]
+    agg_natureza_semana = dict_datasets_dash["natureza_semana"]
+    
+    #top 3 crimes por porte de cidade
+    print("\n[INSIGHT] TOP 3 CRIMES MAIS COMUNS POR PORTE DE CIDADE:")
+
+    df_ordenado_porte = agg_natureza_porte.sort_values(by=["PORTE_MUNICIPIO", "TOTAL"], ascending=[True, False])
+    df_top3_porte = df_ordenado_porte.groupby("PORTE_MUNICIPIO").head(3)
+    
+    porte_atual = None
+    for row in df_top3_porte.itertuples():
+        if row.PORTE_MUNICIPIO != porte_atual:
+            porte_atual = row.PORTE_MUNICIPIO
+            print(f"\n• Cidades de {porte_atual}:")
+        print(f"  - {row.NATUREZA_APURADA}: {row.TOTAL} casos")
+
+    # crime mais comum por porte de cidade
+    print("\n CRIME MAIS COMUM POR PORTE DE CIDADE:")
+    idx_max_porte = agg_natureza_porte.groupby("PORTE_MUNICIPIO")["TOTAL"].idxmax()
+    df_predominante_porte = agg_natureza_porte.loc[idx_max_porte]
+    
+    for row in df_predominante_porte.itertuples():
+        print(f"- Cidades de {row.PORTE_MUNICIPIO}: A maior incidência é de '{row.NATUREZA_APURADA}' ({row.TOTAL} casos).")
+        
+    # crime no fds vs crime em dias uteis
+    print("\n" + "-" * 50)
+    print(" COMPORTAMENTO DAS NATUREZAS NO FIM DE SEMANA:")
+    
+    # Filtra os dois dias mais críticos do fim de semana para ver o top 3 crimes
+    df_fds = agg_natureza_semana[agg_natureza_semana["DIA_SEMANA"].isin(["SÁBADO", "DOMINGO"])]
+    df_fds_agg = df_fds.groupby("NATUREZA_APURADA")["TOTAL"].sum().reset_index()
+    top_3_fds = df_fds_agg.sort_values(by="TOTAL", ascending=False).head(3)
+    
+    print("Top 3 crimes com maior volume combinados no Sábado e Domingo:")
+    for row in top_3_fds.itertuples():
+        print(f"- {row.NATUREZA_APURADA}: {row.TOTAL} ocorrências")
